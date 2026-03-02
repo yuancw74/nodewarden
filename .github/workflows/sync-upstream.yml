@@ -12,17 +12,21 @@ jobs:
   sync:
     runs-on: ubuntu-latest
 
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - run: |
-          git remote add upstream https://github.com/shuaiplus/nodewarden.git || true
-          git fetch upstream
+steps:
+  - name: Checkout repository
+    uses: actions/checkout@v4
+    with:
+      # 使用你刚才创建的 Secret
+      token: ${{ secrets.PAT_TOKEN }} 
+      # 对于某些同步 Action，可能还需要 fetch-depth: 0 以获取所有历史记录
+      fetch-depth: 0
+  - run: |
+      git remote add upstream https://github.com/shuaiplus/nodewarden.git || true
+      git fetch upstream
 
           # 强制让当前分支完全等于 upstream
-          git reset --hard upstream/main
+      git reset --hard upstream/main
 
           # 强制推送
-          git push origin main --force
+      git push origin main --force
+
