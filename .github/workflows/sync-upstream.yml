@@ -10,20 +10,20 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 必须的步骤 1：检出你自己的仓库代码
       - name: Checkout target repo
         uses: actions/checkout@v4
         with:
           ref: main 
-          # 设置为 false 确保 Action 强制使用下面步骤中提供的 PAT Token 
-          persist-credentials: false 
+          persist-credentials: false
+          # 【新增】必须设置为 0，获取所有历史提交记录，供比对使用
+          fetch-depth: 0 
 
-      # 步骤 2：执行自动同步
       - name: Sync upstream changes
         uses: aormsby/Fork-Sync-With-Upstream-action@v3.4
         with:
           upstream_sync_repo: shuaiplus/nodewarden
           upstream_sync_branch: main
           target_sync_branch: main
-          # 注意这里的 } 已经补齐
-          target_repo_token: ${{ secrets.PAT_TOKEN }} 
+          target_repo_token: ${{ secrets.PAT_TOKEN }}
+          # 【新增】有些分支历史完全脱节或长期没更新，允许合并不相关的历史
+          upstream_pull_args: '--allow-unrelated-histories'
