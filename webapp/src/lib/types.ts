@@ -13,6 +13,7 @@ export interface Profile {
   email: string;
   name: string;
   key: string;
+  masterPasswordHint?: string | null;
   privateKey?: string | null;
   publicKey?: string | null;
   role: 'admin' | 'user';
@@ -142,6 +143,7 @@ export interface Cipher {
   creationDate?: string;
   revisionDate?: string;
   deletedDate?: string | null;
+  archivedDate?: string | null;
   attachments?: CipherAttachment[] | null;
   login?: CipherLogin | null;
   card?: CipherCard | null;

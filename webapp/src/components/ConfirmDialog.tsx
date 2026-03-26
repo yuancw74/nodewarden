@@ -1,5 +1,4 @@
 import type { ComponentChildren } from 'preact';
-import { Check, X } from 'lucide-preact';
 import { t } from '@/lib/i18n';
 
 interface ConfirmDialogProps {
@@ -10,6 +9,9 @@ interface ConfirmDialogProps {
   confirmText?: string;
   cancelText?: string;
   danger?: boolean;
+  hideCancel?: boolean;
+  confirmDisabled?: boolean;
+  cancelDisabled?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
   children?: ComponentChildren;
@@ -24,6 +26,7 @@ export default function ConfirmDialog(props: ConfirmDialogProps) {
         className="dialog-card"
         onSubmit={(e) => {
           e.preventDefault();
+          if (props.confirmDisabled) return;
           props.onConfirm();
         }}
       >
@@ -33,14 +36,23 @@ export default function ConfirmDialog(props: ConfirmDialogProps) {
         <button
           type="submit"
           className={`btn ${props.danger ? 'btn-danger' : 'btn-primary'} dialog-btn`}
+          disabled={props.confirmDisabled}
         >
-          <Check size={14} className="btn-icon" />
           {props.confirmText || t('txt_yes')}
         </button>
-        <button type="button" className="btn btn-secondary dialog-btn" onClick={props.onCancel}>
-          <X size={14} className="btn-icon" />
-          {props.cancelText || t('txt_no')}
-        </button>
+        {!props.hideCancel && (
+          <button
+            type="button"
+            className="btn btn-secondary dialog-btn"
+            disabled={props.cancelDisabled}
+            onClick={() => {
+              if (props.cancelDisabled) return;
+              props.onCancel();
+            }}
+          >
+            {props.cancelText || t('txt_no')}
+          </button>
+        )}
         {props.afterActions}
       </form>
     </div>
