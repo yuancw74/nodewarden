@@ -25,5 +25,5 @@ jobs:
           upstream_sync_branch: main
           target_sync_branch: main
           target_repo_token: ${{ secrets.PAT_TOKEN }}
-          # 【新增】有些分支历史完全脱节或长期没更新，允许合并不相关的历史
-          upstream_pull_args: '--allow-unrelated-histories'
+          # 【修改这里】添加 -X ours 参数，意思是发生冲突时以我们(本地)的修改为准
+          upstream_pull_args: '-X ours'
