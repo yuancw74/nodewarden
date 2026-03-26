@@ -5,34 +5,25 @@ on:
     - cron: "0 3 * * *"
   workflow_dispatch:
 
-permissions:
-  contents: write
-
 jobs:
   sync:
     runs-on: ubuntu-latest
 
     steps:
+      # 必须的步骤 1：检出你自己的仓库代码
+      - name: Checkout target repo
+        uses: actions/checkout@v4
+        with:
+          ref: main 
+          # 设置为 false 确保 Action 强制使用下面步骤中提供的 PAT Token 
+          persist-credentials: false 
+
+      # 步骤 2：执行自动同步
       - name: Sync upstream changes
         uses: aormsby/Fork-Sync-With-Upstream-action@v3.4
         with:
           upstream_sync_repo: shuaiplus/nodewarden
           upstream_sync_branch: main
           target_sync_branch: main
-          target_repo_token: ${{ secrets.PAT_TOKEN }
-
-      - name: Configure git
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
-      - name: Sync main from upstream
-        run: |
-          git remote add upstream https://github.com/shuaiplus/NodeWarden.git || true
-          git fetch upstream
-          git checkout main
-          git merge upstream/main
-
-      - name: Push synced main
-        run: |
-          git push origin main
+          # 注意这里的 } 已经补齐
+          target_repo_token: ${{ secrets.PAT_TOKEN }} 
