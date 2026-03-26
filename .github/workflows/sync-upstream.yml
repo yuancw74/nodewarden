@@ -13,9 +13,13 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Sync upstream changes
+        uses: aormsby/Fork-Sync-With-Upstream-action@v3.4
         with:
-          fetch-depth: 0
+          upstream_sync_repo: shuaiplus/nodewarden
+          upstream_sync_branch: main
+          target_sync_branch: main
+          target_repo_token: ${{ secrets.PAT_TOKEN }
 
       - name: Configure git
         run: |
