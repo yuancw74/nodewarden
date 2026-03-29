@@ -50,6 +50,7 @@ import useVaultSendActions from '@/hooks/useVaultSendActions';
 import { useToastManager } from '@/hooks/useToastManager';
 import { t } from '@/lib/i18n';
 import { APP_NOTIFY_EVENT, type AppNotifyDetail } from '@/lib/app-notify';
+import { dispatchBackupProgress, type BackupProgressDetail } from '@/lib/backup-restore-progress';
 import type { AppPhase, Cipher, Folder as VaultFolder, Profile, Send, SessionState } from '@/lib/types';
 
 const IMPORT_ROUTE = '/backup/import-export';
@@ -62,8 +63,51 @@ const SIGNALR_RECORD_SEPARATOR = String.fromCharCode(0x1e);
 const SIGNALR_UPDATE_TYPE_SYNC_VAULT = 5;
 const SIGNALR_UPDATE_TYPE_LOG_OUT = 11;
 const SIGNALR_UPDATE_TYPE_DEVICE_STATUS = 12;
+const SIGNALR_UPDATE_TYPE_BACKUP_RESTORE_PROGRESS = 13;
 
 type ThemePreference = 'system' | 'light' | 'dark';
+const MAGNETIC_SELECTOR = '.topbar .btn, .topbar .user-chip, .side-link, .mobile-tab';
+
+function installMagneticUiFeedback() {
+  if (typeof window === 'undefined' || typeof document === 'undefined') return () => {};
+  if (typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return () => {};
+  if (typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches) return () => {};
+
+  const resetNode = (node: HTMLElement) => {
+    node.style.setProperty('--mag-x', '0px');
+    node.style.setProperty('--mag-y', '0px');
+    node.style.removeProperty('--mx');
+    node.style.removeProperty('--my');
+  };
+
+  const onPointerMove = (event: PointerEvent) => {
+    const node = event.target instanceof Element ? event.target.closest<HTMLElement>(MAGNETIC_SELECTOR) : null;
+    if (!node) return;
+    const rect = node.getBoundingClientRect();
+    const localX = event.clientX - rect.left;
+    const localY = event.clientY - rect.top;
+    const dx = (localX - rect.width / 2) / Math.max(rect.width / 2, 1);
+    const dy = (localY - rect.height / 2) / Math.max(rect.height / 2, 1);
+    node.style.setProperty('--mx', `${localX}px`);
+    node.style.setProperty('--my', `${localY}px`);
+    node.style.setProperty('--mag-x', `${dx * 6}px`);
+    node.style.setProperty('--mag-y', `${dy * 4}px`);
+  };
+
+  const onPointerLeave = (event: Event) => {
+    const node = event.target instanceof Element ? event.target.closest<HTMLElement>(MAGNETIC_SELECTOR) : null;
+    if (!node) return;
+    resetNode(node);
+  };
+
+  document.addEventListener('pointermove', onPointerMove, { passive: true });
+  document.addEventListener('pointerleave', onPointerLeave, true);
+
+  return () => {
+    document.removeEventListener('pointermove', onPointerMove);
+    document.removeEventListener('pointerleave', onPointerLeave, true);
+  };
+}
 
 function readThemePreference(): ThemePreference {
   if (typeof window === 'undefined') return 'system';
@@ -217,6 +261,8 @@ export default function App() {
     if (typeof window === 'undefined') return;
     window.localStorage.setItem(THEME_STORAGE_KEY, themePreference);
   }, [themePreference]);
+
+  useEffect(() => installMagneticUiFeedback(), []);
 
   function handleToggleTheme() {
     setThemePreference((prev) => {
@@ -838,6 +884,15 @@ export default function App() {
         return;
       }
 
+      let pingTimer: number | null = null;
+
+      const clearPingTimer = () => {
+        if (pingTimer !== null) {
+          window.clearInterval(pingTimer);
+          pingTimer = null;
+        }
+      };
+
       socket.addEventListener('open', () => {
         reconnectAttempts = 0;
         void refreshAuthorizedDevicesRef.current();
@@ -845,7 +900,16 @@ export default function App() {
           socket?.send(`{"protocol":"json","version":1}${SIGNALR_RECORD_SEPARATOR}`);
         } catch {
           socket?.close();
+          return;
         }
+        clearPingTimer();
+        pingTimer = window.setInterval(() => {
+          try {
+            socket?.send(`{"type":6}${SIGNALR_RECORD_SEPARATOR}`);
+          } catch {
+            // send failure will trigger close event
+          }
+        }, 15_000);
       });
 
       socket.addEventListener('message', (event) => {
@@ -864,6 +928,21 @@ export default function App() {
             void refreshAuthorizedDevicesRef.current();
             continue;
           }
+          if (updateType === SIGNALR_UPDATE_TYPE_BACKUP_RESTORE_PROGRESS) {
+            const payload = frame.arguments?.[0]?.Payload;
+            if (
+              payload
+              && typeof payload === 'object'
+              && (
+                payload.operation === 'backup-restore'
+                || payload.operation === 'backup-export'
+                || payload.operation === 'backup-remote-run'
+              )
+            ) {
+              dispatchBackupProgress(payload as BackupProgressDetail);
+            }
+            continue;
+          }
           if (updateType !== SIGNALR_UPDATE_TYPE_SYNC_VAULT) continue;
           const contextId = String(frame.arguments?.[0]?.ContextId || '').trim();
           if (contextId && contextId === getCurrentDeviceIdentifier()) continue;
@@ -873,6 +952,7 @@ export default function App() {
 
       socket.addEventListener('close', () => {
         socket = null;
+        clearPingTimer();
         void refreshAuthorizedDevicesRef.current();
         scheduleReconnect();
       });
@@ -891,9 +971,11 @@ export default function App() {
     return () => {
       disposed = true;
       clearReconnectTimer();
-      if (socket && socket.readyState === WebSocket.OPEN) {
+      if (socket) {
+        const s = socket;
+        socket = null;
         try {
-          socket.close();
+          s.close();
         } catch {
           // ignore close races
         }
@@ -1069,13 +1151,16 @@ export default function App() {
     onRevokeInvite: adminActions.revokeInvite,
     onExportBackup: backupActions.exportBackup,
     onImportBackup: backupActions.importBackup,
+    onImportBackupAllowingChecksumMismatch: backupActions.importBackupAllowingChecksumMismatch,
     onLoadBackupSettings: backupActions.loadSettings,
     onSaveBackupSettings: backupActions.saveSettings,
     onRunRemoteBackup: backupActions.runRemoteBackup,
     onListRemoteBackups: backupActions.listRemoteBackups,
     onDownloadRemoteBackup: backupActions.downloadRemoteBackup,
+    onInspectRemoteBackup: backupActions.inspectRemoteBackup,
     onDeleteRemoteBackup: backupActions.deleteRemoteBackup,
     onRestoreRemoteBackup: backupActions.restoreRemoteBackup,
+    onRestoreRemoteBackupAllowingChecksumMismatch: backupActions.restoreRemoteBackupAllowingChecksumMismatch,
   };
 
   if (jwtWarning) {
